@@ -469,7 +469,7 @@ async function loadSearch() {
     const query = document.getElementById("search").value;
     document.getElementById("cards").innerHTML = "";
     verifiedLevels.then(levels => {
-        let results = levels.filter(l => l.title.toLowerCase().includes(query.toLowerCase()));
+        let results = levels.filter(l => l.title.toLowerCase().replace(" ", "").includes(query.toLowerCase().replace(" ", "")));
         if (results.length > 0) {
             for (let i = 0; i < Math.min(results.length, 100); i++) {
                 let card = document.createElement("div");
