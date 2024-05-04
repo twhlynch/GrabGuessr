@@ -3,14 +3,13 @@ import { Controls } from './Controls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+import * as SHADERS from './shaders.js';
 
 const playerHeight = 1;
 
 let camera, scene, renderer, light, sun, controls;
 
-const velocity = new THREE.Vector3();
-
-let spawnPoint = new THREE.Vector3(0, playerHeight, 0);
+let startLocation = new THREE.Vector3(0, playerHeight, 0);
 let objects = [];
 let animatedObjects = [];
 let loader = new GLTFLoader();
@@ -19,8 +18,13 @@ let isLoading = true;
 let answer = undefined;
 let score = 0;
 let difficulty = 500;
+let hintsGiven = 0;
+let sky;
 let verifiedLevels = fetch("https://grab-tools.live/stats_data/all_verified.json").then(response => response.json());
 let textMaterial = new THREE.MeshBasicMaterial({color: 0xffffff});
+let endLocation = new THREE.Vector3(0, playerHeight, 0);
+let signLocations = [];
+let signPositions = [];
 
 let materialList = [
     'textures/default.png',
@@ -44,8 +48,13 @@ let shapeList = [
     'models/start_end.gltf'
 ];
 
-let startMaterial, finishMaterial;
+let sunAngle;
+let sunAltitude;
+let horizonColor;
+
+let startMaterial, finishMaterial, skyMaterial, signMaterial, neonMaterial;
 let materials = [];
+let objectMaterials = [];
 let shapes = [];
 
 let PROTOBUF_DATA = `
@@ -227,88 +236,10 @@ message LevelNode
 	repeated Animation animations = 15;
 }
 `
-const vertexShader = /*glsl*/`
-
-varying vec3 vWorldPosition;
-varying vec3 vNormal;
-
-uniform mat3 worldNormalMatrix;
-
-void main()
-{
-    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-    vWorldPosition = worldPosition.xyz;
-
-    vNormal = worldNormalMatrix * normal;
-
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}`;
-const fragmentShader = /*glsl*/`
-
-varying vec3 vWorldPosition;
-varying vec3 vNormal;
-
-uniform vec3 colors;
-uniform float opacity;
-uniform sampler2D colorTexture;
-uniform float tileFactor;
-
-const float gamma = 0.5;
-
-void main()
-{
-    vec4 color = vec4(colors, opacity);
-    vec3 blendNormals = abs(vNormal);
-    vec3 texSample;
-    vec4 adjustment = vec4(1.0, 1.0, 1.0, 1.0);
-
-    if(blendNormals.x > blendNormals.y && blendNormals.x > blendNormals.z)
-    {
-        texSample = texture2D(colorTexture, vWorldPosition.zy * tileFactor).rgb;
-    }
-    else if(blendNormals.y > blendNormals.z)
-    {
-        texSample = texture2D(colorTexture, vWorldPosition.xz * tileFactor).rgb;
-    }
-    else
-    {
-        texSample = texture2D(colorTexture, vWorldPosition.xy * tileFactor).rgb;
-    }
-
-    texSample = pow(texSample, vec3(1.0 / gamma));
-
-    color.rgb *= texSample * adjustment.rgb;
-    gl_FragColor = LinearTosRGB(color);
-}`;
-const startFinishVS = /*glsl*/`
-varying vec2 vTexcoord;
-
-void main()
-{
-    vTexcoord = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}`;
-const startFinishFS = /*glsl*/`
-varying vec2 vTexcoord;
-
-uniform vec4 diffuseColor;
-
-void main()
-{
-    vec4 color = diffuseColor;
-    float factor = vTexcoord.y;
-    factor *= factor * factor;
-    factor = clamp(factor, 0.0, 1.0);
-    color.a = factor;
-
-    gl_FragColor = color;
-}`;
-
 
 function loadTexture(path) {
     return new Promise((resolve) => {
         const texture = new THREE.TextureLoader().load(path, function (texture) {
-            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
             resolve(texture);
         });
     });
@@ -326,15 +257,19 @@ function loadModel(path) {
 async function initAttributes() {
     for (const path of materialList) {
         const texture = await loadTexture(path);
+        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        texture.colorSpace = THREE.SRGBColorSpace;
         let material = new THREE.ShaderMaterial({
-            vertexShader: vertexShader,
-            fragmentShader: fragmentShader,
+            vertexShader: SHADERS.levelVS,
+            fragmentShader: SHADERS.levelFS,
             uniforms: {
                 "colorTexture": { value: texture },
                 "tileFactor": { value: 1.1 },
+                "diffuseColor": { value: [1.0, 1.0, 1.0] },
                 "worldNormalMatrix": { value: new THREE.Matrix3() },
-                "colors": { value: new THREE.Vector3(1.0, 1.0, 1.0) },
-                "opacity": { value: 1.0 },
+                "neonEnabled": { value: 0.0 },
+                "fogEnabled": { value: 1.0 },
+                "specularColor": { value: [0.3, 0.3, 0.3, 16.0]}
             }
         });
         materials.push(material);
@@ -346,20 +281,45 @@ async function initAttributes() {
     }
 
     startMaterial = new THREE.ShaderMaterial();
-	startMaterial.vertexShader = startFinishVS;
-	startMaterial.fragmentShader = startFinishFS;
+	startMaterial.vertexShader = SHADERS.startFinishVS;
+	startMaterial.fragmentShader = SHADERS.startFinishFS;
 	startMaterial.flatShading = true;
 	startMaterial.transparent = true;
 	startMaterial.depthWrite = false;
 	startMaterial.uniforms = { "diffuseColor": {value: [0.0, 1.0, 0.0, 1.0]}};
+	objectMaterials.push(startMaterial);
 
 	finishMaterial = new THREE.ShaderMaterial();
-	finishMaterial.vertexShader = startFinishVS;
-	finishMaterial.fragmentShader = startFinishFS;
+	finishMaterial.vertexShader = SHADERS.startFinishVS;
+	finishMaterial.fragmentShader = SHADERS.startFinishFS;
 	finishMaterial.flatShading = true;
 	finishMaterial.transparent = true;
 	finishMaterial.depthWrite = false;
 	finishMaterial.uniforms = { "diffuseColor": {value: [1.0, 0.0, 0.0, 1.0]}};
+	objectMaterials.push(finishMaterial);
+    
+    skyMaterial = new THREE.ShaderMaterial();
+    skyMaterial.vertexShader = SHADERS.skyVS;
+    skyMaterial.fragmentShader = SHADERS.skyFS;
+    skyMaterial.flatShading = false;
+    skyMaterial.depthWrite = false;
+    skyMaterial.side = THREE.BackSide;
+
+    signMaterial = materials[4].clone();
+    signMaterial.uniforms.colorTexture = materials[4].uniforms.colorTexture;
+    signMaterial.vertexShader = SHADERS.signVS;
+    signMaterial.fragmentShader = SHADERS.signFS;
+    objectMaterials.push(signMaterial);
+    
+    neonMaterial = materials[8].clone();
+    neonMaterial.uniforms.colorTexture = materials[8].uniforms.colorTexture;
+    neonMaterial.uniforms.specularColor.value = [0.4, 0.4, 0.4, 64.0];
+    neonMaterial.uniforms.neonEnabled.value = 1.0;
+    objectMaterials.push(neonMaterial);
+
+    sunAngle = new THREE.Euler(THREE.MathUtils.degToRad(45), THREE.MathUtils.degToRad(315), 0.0)
+    sunAltitude = 45.0
+    horizonColor = [0.916, 0.9574, 0.9574]
 }
 
 function readArrayBuffer(file) {
@@ -393,17 +353,21 @@ async function openProto(link) {
 
 async function init() {
 
-    renderer = new THREE.WebGLRenderer({alpha: true, antialias: true});
+    THREE.ColorManagement.enabled = true;
+
+    renderer = new THREE.WebGLRenderer({antialias: true, preserveDrawingBuffer: true});
     renderer.setSize( window.innerWidth, window.innerHeight );
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+	renderer.setClearColor(new THREE.Color(143.0/255.0, 182.0/255.0, 221.0/255.0), 1.0);
     document.getElementById("viewport").appendChild( renderer.domElement );
     renderer.setPixelRatio(window.devicePixelRatio);
 
     scene = new THREE.Scene();
 
-    camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 5000 );
+    camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 10000 );
     camera.position.set( 0, playerHeight, 0 );
 
-    light = new THREE.AmbientLight(0xffffff);
+    light = new THREE.AmbientLight(0x404040);
     scene.add(light);
     sun = new THREE.DirectionalLight( 0xffffff, 0.5 );
     scene.add( sun );
@@ -416,7 +380,6 @@ async function init() {
     let randomButton = document.getElementById("randomButton");
     
     randomButton.addEventListener( 'click', () => {
-        score -= 1;
         displayScore();
         loadRandomLevel();
     });
@@ -434,6 +397,12 @@ async function loadRandomLevel() {
         const sorted = [...levels].sort((a, b) => b?.statistics?.total_played - a?.statistics?.total_played);
         const randomLevel = sorted[Math.floor(Math.random() * Math.min(difficulty, sorted.length - 1))];
         answer = randomLevel.identifier;
+        hintsGiven = 0;
+        hintButtons.forEach(button => {
+            button.classList.remove("unlocked");
+        });
+        startHint.classList.add("unlocked");
+        displayBonus();
         const downloadUrl = `https://api.slin.dev/grab/v1/download/${randomLevel.data_key.replace("level_data:", "").split(":").join("/")}`;
         let level =  await openProto(downloadUrl);
         await loadLevel(level);
@@ -443,15 +412,13 @@ async function loadRandomLevel() {
 function displayScore() {
     document.getElementById("score").innerText = `Score: ${score}`;
 }
+function displayBonus() {
+    document.getElementById("bonus").innerText = `+ ${(5 - hintsGiven) * 1000}`;
+}
 
 function guess(identifier) {
     if (identifier == answer) {
-        if (difficulty == 100) {score += 1;}
-        if (difficulty == 500) {score += 5;}
-        if (difficulty == 3000) {score += 10;}
-        if (difficulty == 9999999) {score += 20;}
-    } else {
-        score -= 1;
+        score += (5 - hintsGiven) * 1000;
     }
     displayScore();
     loadRandomLevel();
@@ -466,6 +433,46 @@ difficultyButtons.forEach(button => {
         });
         button.classList.add("difficulty");
     });
+});
+
+const hintButtons = document.querySelectorAll(".hint");
+hintButtons.forEach(button => {
+    button.addEventListener("click", () => {
+        if (!button.className.includes('unlocked')) {
+            hintsGiven += 1;
+            displayBonus();
+            button.classList.add("unlocked");
+        }
+    });
+});
+
+const startHint = document.getElementById("start-hint");
+const finishHint = document.getElementById("finish-hint");
+const signHint = document.getElementById("sign-hint");
+const fogHint = document.getElementById("fog-hint");
+let signIter = 0;
+
+startHint.addEventListener("click", () => {
+    signIter = 0;
+    camera.position.copy(startLocation);
+});
+finishHint.addEventListener("click", () => {
+    signIter = 0;
+    camera.position.copy(endLocation);
+});
+signHint.addEventListener("click", () => {
+    camera.position.copy(signLocations[signIter]);
+    camera.lookAt(signPositions[signIter]);
+    signIter = (signIter + 1) % signLocations.length;
+});
+fogHint.addEventListener("click", () => {
+    scene.traverse(function(node) {
+		if(node instanceof THREE.Mesh && node?.geometry?.type != "TextGeometry") {
+			if("material" in node && "fogEnabled" in node.material.uniforms) {
+				node.material.uniforms["fogEnabled"].value = 0.0;
+			}
+		}
+	})
 });
 
 async function loadSearch() {
@@ -510,39 +517,107 @@ async function loadLevel(level) {
     animatedObjects = [];
     objects.push(controls.getObject());
 
-    velocity.x = 0;
-    velocity.y = 0;
-    velocity.z = 0;
-    
     scene.add(light);
     scene.add(sun);
     scene.add(camera);
+    
+    let ambience = level.ambienceSettings;
+    
+    console.log(ambience);
+    
+    if (ambience) {
+        if (ambience.skyHorizonColor) {
+            ambience.skyHorizonColor?.r ? null : ambience.skyHorizonColor.r = 0;
+            ambience.skyHorizonColor?.g ? null : ambience.skyHorizonColor.g = 0;
+            ambience.skyHorizonColor?.b ? null : ambience.skyHorizonColor.b = 0;
+        }
+        if (ambience.skyZenithColor) {
+            ambience.skyZenithColor?.r ? null : ambience.skyZenithColor.r = 0;
+            ambience.skyZenithColor?.g ? null : ambience.skyZenithColor.g = 0;
+            ambience.skyZenithColor?.b ? null : ambience.skyZenithColor.b = 0;
+        }
+        ambience.sunAltitude ? null : ambience.sunAltitude = 0;
+        ambience.sunAzimuth ? null : ambience.sunAzimuth = 0;
+        ambience.sunSize ? null : ambience.sunSize = 0;
+        ambience.fogDDensity ? null : ambience.fogDDensity = 0;
+
+        sunAngle = new THREE.Euler(THREE.MathUtils.degToRad(ambience.sunAltitude), THREE.MathUtils.degToRad(ambience.sunAzimuth), 0.0);
+
+        skyMaterial.uniforms["cameraFogColor0"] = { value: [ambience.skyHorizonColor.r, ambience.skyHorizonColor.g, ambience.skyHorizonColor.b] }
+        skyMaterial.uniforms["cameraFogColor1"] = { value: [ambience.skyZenithColor.r, ambience.skyZenithColor.g, ambience.skyZenithColor.b] }
+        skyMaterial.uniforms["sunSize"] = { value: ambience.sunSize }
+
+        sunAltitude = ambience.sunAltitude
+        horizonColor = [ambience.skyHorizonColor.r, ambience.skyHorizonColor.g, ambience.skyHorizonColor.b]
+    } else {
+        skyMaterial.uniforms["cameraFogColor0"] = { value: [0.916, 0.9574, 0.9574] }
+        skyMaterial.uniforms["cameraFogColor1"] = { value: [0.28, 0.476, 0.73] }
+        skyMaterial.uniforms["sunSize"] = { value: 1.0 }
+    }
+
+    const sunDirection = new THREE.Vector3( 0, 0, 1 );
+    sunDirection.applyEuler(sunAngle);
+
+    const skySunDirection = sunDirection.clone()
+    skySunDirection.x = skySunDirection.x;
+    skySunDirection.y = skySunDirection.y;
+    skySunDirection.z = skySunDirection.z;
+
+    let sunColorFactor = 1.0 - sunAltitude / 90.0
+    sunColorFactor *= sunColorFactor
+    sunColorFactor = 1.0 - sunColorFactor
+    sunColorFactor *= 0.8
+    sunColorFactor += 0.2
+    let sunColor = [horizonColor[0] * (1.0 - sunColorFactor) + sunColorFactor, horizonColor[1] * (1.0 - sunColorFactor) + sunColorFactor, horizonColor[2] * (1.0 - sunColorFactor) + sunColorFactor]
+
+    console.log(sunColor);
+    skyMaterial.uniforms["sunDirection"] = { value: skySunDirection }
+    skyMaterial.uniforms["sunColor"] = { value: sunColor }
+
+    sky = new THREE.Mesh(shapes[1].geometry, skyMaterial);
+    sky.frustumCulled = false
+    sky.renderOrder = 1000 //sky should be rendered after opaque, before transparent
+    scene.add(sky);
+    console.log(sky);
+    // document.body.style.backgroundImage = `linear-gradient(rgb(${sky[0][0]}, ${sky[0][1]}, ${sky[0][2]}), rgb(${sky[1][0]}, ${sky[1][1]}, ${sky[1][2]}), rgb(${sky[0][0]}, ${sky[0][1]}, ${sky[0][2]}))`;
+    function updateMaterial(material) {
+        let density = 0.0
+        if(ambience)
+        {
+            material.uniforms["cameraFogColor0"] = { value: [ambience.skyHorizonColor.r, ambience.skyHorizonColor.g, ambience.skyHorizonColor.b] }
+            material.uniforms["cameraFogColor1"] = { value: [ambience.skyZenithColor.r, ambience.skyZenithColor.g, ambience.skyZenithColor.b] }
+            material.uniforms["sunSize"] = { value: ambience.sunSize }
+            density = ambience.fogDDensity;
+        }
+        else
+        {
+            material.uniforms["cameraFogColor0"] = { value: [0.916, 0.9574, 0.9574] }
+            material.uniforms["cameraFogColor1"] = { value: [0.28, 0.476, 0.73] }
+            material.uniforms["sunSize"] = { value: 1.0 }
+        }
+
+        material.uniforms["sunDirection"] = { value: skySunDirection }
+        material.uniforms["sunColor"] = { value: sunColor }
+
+        let densityFactor = density * density * density * density
+        let fogDensityX = 0.5 * densityFactor + 0.000001 * (1.0 - densityFactor)
+        let fogDensityY = 1.0/(1.0 - Math.exp(-1500.0 * fogDensityX))
+
+        material.uniforms["cameraFogDistance"] = { value: [fogDensityX, fogDensityY] }
+			
+    }
+    
+    for (let material of materials) {
+        updateMaterial(material);
+    }
+    for (let material of objectMaterials) {
+        updateMaterial(material);
+    }
 
     level.levelNodes.forEach(node => {
         loadLevelNode(node, scene);
     });
 
-    let ambience = level.ambienceSettings;
-    let sky = [
-        [0, 0, 0],
-        [0, 0, 0]
-    ];
-    
-    if (ambience) {
-        if (ambience.skyZenithColor) {
-            sky[0][0] = (ambience?.skyZenithColor?.r || 0) * 255;
-            sky[0][1] = (ambience?.skyZenithColor?.g || 0) * 255;
-            sky[0][2] = (ambience?.skyZenithColor?.b || 0) * 255;
-        }
-        if (ambience.skyHorizonColor) {
-            sky[1][0] = (ambience?.skyHorizonColor?.r || 0) * 255;
-            sky[1][1] = (ambience?.skyHorizonColor?.g || 0) * 255;
-            sky[1][2] = (ambience?.skyHorizonColor?.b || 0) * 255;
-        }
-    }
-
-    document.body.style.backgroundImage = `linear-gradient(rgb(${sky[0][0]}, ${sky[0][1]}, ${sky[0][2]}), rgb(${sky[1][0]}, ${sky[1][1]}, ${sky[1][2]}), rgb(${sky[0][0]}, ${sky[0][1]}, ${sky[0][2]}))`;
-    
     console.log(level);
     console.log(objects);
     console.log(scene);
@@ -629,13 +704,15 @@ function loadLevelNode(node, parent) {
             material = materials[node.levelNodeStatic.material].clone();
         }
         if (node.levelNodeStatic.material == 8) {
+            if (node.levelNodeStatic.isNeon) {
+                material = objectMaterials[3].clone();
+            }
             node.levelNodeStatic.color.r ? null : node.levelNodeStatic.color.r = 0;
             node.levelNodeStatic.color.g ? null : node.levelNodeStatic.color.g = 0;
             node.levelNodeStatic.color.b ? null : node.levelNodeStatic.color.b = 0;
-            material.uniforms.colors.value = new THREE.Vector3(node.levelNodeStatic.color.r, node.levelNodeStatic.color.g, node.levelNodeStatic.color.b);
-            if (node.levelNodeStatic.isNeon) {
-                //
-            }
+            material.uniforms.diffuseColor.value = [node.levelNodeStatic.color.r, node.levelNodeStatic.color.g, node.levelNodeStatic.color.b]
+            const specularFactor = Math.sqrt(node.levelNodeStatic.color.r * node.levelNodeStatic.color.r + node.levelNodeStatic.color.g * node.levelNodeStatic.color.g + node.levelNodeStatic.color.b * node.levelNodeStatic.color.b) * 0.15
+            material.uniforms.specularColor.value = [specularFactor, specularFactor, specularFactor, 16.0]
         }
         object = new THREE.Mesh(shapes[node?.levelNodeStatic?.shape-1000 || 0].geometry, material);
         // object.material = material;
@@ -713,7 +790,7 @@ function loadLevelNode(node, parent) {
     } else if (node.levelNodeSign) {
         // object = shapes[5].clone();
         // object.material = materials[4].clone();
-        object = new THREE.Mesh(shapes[5].geometry, materials[4]);
+        object = new THREE.Mesh(shapes[5].geometry, objectMaterials[2].clone());
         parent.add(object);
         object.position.x = -node.levelNodeSign.position.x || 0;
         object.position.y = node.levelNodeSign.position.y || 0;
@@ -758,6 +835,14 @@ function loadLevelNode(node, parent) {
             textGeo.translate( centerOffsetX, centerOffsetY, 0 );
             const textMesh = new THREE.Mesh( textGeo, textMaterial );
             textMesh.position.z = -0.2;
+
+            const teleportObject = new THREE.Object3D();
+            teleportObject.position.z = -1;
+            object.add( teleportObject );
+            let signLocation = teleportObject.getWorldPosition(new THREE.Vector3());
+            signLocations.push(signLocation);
+            signPositions.push(object.position.clone());
+
             object.add(textMesh);
 
         } );
@@ -785,8 +870,8 @@ function loadLevelNode(node, parent) {
         object.initialRotation = object.quaternion.clone();
 
         objects.push(object);
-        camera.position.set(object.position.x, object.position.y + playerHeight, object.position.z);
-        spawnPoint.set(object.position.x, object.position.y + playerHeight, object.position.z);
+        startLocation.set(object.position.x, object.position.y + playerHeight, object.position.z);
+        camera.position.copy(startLocation);
 
     } else if (node.levelNodeFinish) {
         // object = shapes[6].clone();
@@ -803,6 +888,7 @@ function loadLevelNode(node, parent) {
         object.initialRotation = object.quaternion.clone();
 
         objects.push(object);
+        endLocation.set(object.position.x, object.position.y + playerHeight, object.position.z);
     }
     if (object !== undefined) {
         object.grabNodeData = node;
