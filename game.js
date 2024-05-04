@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { Controls } from './Controls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
 const playerHeight = 1;
 
@@ -18,6 +20,7 @@ let answer = undefined;
 let score = 0;
 let difficulty = 500;
 let verifiedLevels = fetch("https://grab-tools.live/stats_data/all_verified.json").then(response => response.json());
+let textMaterial = new THREE.MeshBasicMaterial({color: 0xffffff});
 
 let materialList = [
     'textures/default.png',
@@ -719,6 +722,45 @@ function loadLevelNode(node, parent) {
         object.quaternion.x = -node.levelNodeSign.rotation.x || 0;
         object.quaternion.y = node.levelNodeSign.rotation.y || 0;
         object.quaternion.z = -node.levelNodeSign.rotation.z || 0;
+
+        const signText = node.levelNodeSign.text || "";
+        const words = signText.split(" ");
+        let text = "";
+        for (let i = 0; i < words.length; i++) {
+            if ((i + 1) % 3 == 0) {
+                text += words[i] + "\n";
+            } else {
+                text += words[i] + " ";
+            }
+        }
+        const fontLoader = new FontLoader();
+        fontLoader.load( 'font.typeface.json', function ( response ) {
+
+            let font = response;
+
+            let textGeo = new TextGeometry( text, {
+    
+                font: font,
+    
+                size: 1,
+                depth: -1,
+                curveSegments: 4,
+    
+                bevelThickness: 0,
+                bevelSize: 0,
+                bevelEnabled: false
+    
+            } );
+            textGeo.scale(-0.04, 0.04, 0.0000001);
+            textGeo.computeBoundingBox();
+            const centerOffsetX = 0.5 * ( textGeo.boundingBox.max.x - textGeo.boundingBox.min.x );
+            const centerOffsetY = 0.5 * ( textGeo.boundingBox.max.y - textGeo.boundingBox.min.y );
+            textGeo.translate( centerOffsetX, centerOffsetY, 0 );
+            const textMesh = new THREE.Mesh( textGeo, textMaterial );
+            textMesh.position.z = -0.2;
+            object.add(textMesh);
+
+        } );
         
         object.initialPosition = object.position.clone();
         object.initialRotation = object.quaternion.clone();
