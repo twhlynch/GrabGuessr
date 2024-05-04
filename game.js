@@ -16,7 +16,7 @@ let clock = new THREE.Clock();
 let isLoading = true;
 let answer = undefined;
 let score = 0;
-let difficulty = 100;
+let difficulty = 500;
 let verifiedLevels = fetch("https://grab-tools.live/stats_data/all_verified.json").then(response => response.json());
 
 let materialList = [
@@ -469,7 +469,10 @@ async function loadSearch() {
     const query = document.getElementById("search").value;
     document.getElementById("cards").innerHTML = "";
     verifiedLevels.then(levels => {
-        let results = levels.filter(l => l.title.toLowerCase().replace(" ", "").includes(query.toLowerCase().replace(" ", "")));
+        let results = levels.filter(l => (
+            l.title.toLowerCase().replace(" ", "").includes(query.toLowerCase().replace(" ", "")) ||
+            (l?.creators || []).toString().toLowerCase().replace(" ", "").includes(query.toLowerCase().replace(" ", ""))
+        ));
         if (results.length > 0) {
             for (let i = 0; i < Math.min(results.length, 100); i++) {
                 let card = document.createElement("div");

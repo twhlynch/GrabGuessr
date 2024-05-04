@@ -78,6 +78,8 @@ class Controls extends EventDispatcher {
 
 function onDown() {
 
+	this.touchStartX = event.touches ? event.touches[ 0 ].clientX : event.clientX;
+	this.touchStartY = event.touches ? event.touches[ 0 ].clientY : event.clientY;
 	this.isActive = true;
 
 }
