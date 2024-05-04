@@ -639,6 +639,10 @@ async function loadLevel(level) {
 }
 
 function createPopup() {
+    let lastPopup = document.getElementsByClassName("popup");
+    if (lastPopup.length > 0) {
+        lastPopup[0].remove();
+    }
     console.log(answerJSON);
     let card = document.createElement("div");
     card.className = "card popup";
