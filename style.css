@@ -244,3 +244,11 @@ menu svg {
 #hints .hint.unlocked {
     justify-content: center;
 }
+.card.popup {
+    position: fixed;
+    top: 80px;
+    left: 1rem;
+    width: 200px;
+    height: fit-content;
+    min-height: auto;
+}

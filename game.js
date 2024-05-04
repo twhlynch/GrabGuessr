@@ -16,6 +16,7 @@ let loader = new GLTFLoader();
 let clock = new THREE.Clock();
 let isLoading = true;
 let answer = undefined;
+let answerJSON = undefined;
 let score = 0;
 let difficulty = 500;
 let hintsGiven = 0;
@@ -380,6 +381,7 @@ async function init() {
     let randomButton = document.getElementById("randomButton");
     
     randomButton.addEventListener( 'click', () => {
+        createPopup();
         displayScore();
         loadRandomLevel();
     });
@@ -397,6 +399,7 @@ async function loadRandomLevel() {
         const sorted = [...levels].sort((a, b) => b?.statistics?.total_played - a?.statistics?.total_played);
         const randomLevel = sorted[Math.floor(Math.random() * Math.min(difficulty, sorted.length - 1))];
         answer = randomLevel.identifier;
+        answerJSON = randomLevel;
         hintsGiven = 0;
         hintButtons.forEach(button => {
             button.classList.remove("unlocked");
@@ -419,6 +422,8 @@ function displayBonus() {
 function guess(identifier) {
     if (identifier == answer) {
         score += (5 - hintsGiven) * 1000;
+    } else {
+        createPopup();
     }
     displayScore();
     loadRandomLevel();
@@ -476,13 +481,22 @@ fogHint.addEventListener("click", () => {
 });
 
 async function loadSearch() {
-    const query = document.getElementById("search").value;
+    let query = document.getElementById("search").value;
     document.getElementById("cards").innerHTML = "";
     verifiedLevels.then(levels => {
         let results = levels.filter(l => (
             l.title.toLowerCase().replace(" ", "").includes(query.toLowerCase().replace(" ", "")) ||
             (l?.creators || []).toString().toLowerCase().replace(" ", "").includes(query.toLowerCase().replace(" ", ""))
         ));
+        if (query.charAt(0) == '"' && query.charAt(query.length - 1) == '"') {
+            query = query.substring(1, query.length - 1);
+            results = levels.filter(l => (
+                l.title.toLowerCase().replace(" ", "") == (query.toLowerCase().replace(" ", "")) ||
+                l.title.toLowerCase().replace(" ", "") == (query.toLowerCase()) ||
+                l.title.toLowerCase() == (query.toLowerCase().replace(" ", "")) ||
+                l.title.toLowerCase() == (query.toLowerCase())
+            ));
+        }
         if (results.length > 0) {
             for (let i = 0; i < Math.min(results.length, 100); i++) {
                 let card = document.createElement("div");
@@ -622,6 +636,30 @@ async function loadLevel(level) {
     console.log(objects);
     console.log(scene);
     isLoading = false;
+}
+
+function createPopup() {
+    console.log(answerJSON);
+    let card = document.createElement("div");
+    card.className = "card popup";
+    let thumbnail = document.createElement("img");
+    thumbnail.onerror = () => {
+        thumbnail.style.display = "none";
+    };
+    thumbnail.src = "https://grab-images.slin.dev/" + answerJSON?.images?.thumb?.key;
+    card.appendChild(thumbnail);
+    let title = document.createElement("h3");
+    title.innerText = answerJSON.title;
+    title.className = "title";
+    card.appendChild(title);
+    let creators = document.createElement("p");
+    creators.innerText = answerJSON.creators;
+    creators.className = "creators";
+    card.appendChild(creators);
+    document.body.appendChild(card);
+    card.addEventListener("click", () => {
+        card.remove();
+    });
 }
 
 function loadLevelNode(node, parent) {
