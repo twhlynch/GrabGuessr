@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import * as SHADERS from './shaders.js';
+import { PROTOBUF_DATA } from './protobuf.js';
 
 const playerHeight = 1;
 
@@ -18,15 +19,18 @@ let isLoading = true;
 let answer = undefined;
 let answerJSON = undefined;
 let score = 0;
+let round = 0;
 let difficulty = 500;
 let hintsGiven = 0;
 let sky;
-let verifiedLevels = fetch("https://grab-tools.live/stats_data/all_verified.json").then(response => response.json());
+let verifiedLevels, sortedLevels;
 let textMaterial = new THREE.MeshBasicMaterial({color: 0xffffff});
 let endLocation = new THREE.Vector3(0, playerHeight, 0);
 let signLocations = [];
 let signPositions = [];
+let time = 0;
 
+let home = document.getElementById("home");
 let materialList = [
     'textures/default.png',
     'textures/grabbable.png',
@@ -57,186 +61,6 @@ let startMaterial, finishMaterial, skyMaterial, signMaterial, neonMaterial;
 let materials = [];
 let objectMaterials = [];
 let shapes = [];
-
-let PROTOBUF_DATA = `
-syntax = "proto3";
-
-package COD.Level;
-
-message Level
-{
-  uint32 formatVersion = 1;
-
-  string title = 2;
-  string creators = 3;
-  string description = 4;
-  uint32 complexity = 5;
-  uint32 maxCheckpointCount = 7;
-
-  AmbienceSettings ambienceSettings = 8;
-
-  repeated LevelNode levelNodes = 6;
-}
-
-message Vector
-{
-	float x = 1;
-	float y = 2;
-	float z = 3;
-}
-
-message Quaternion
-{
-	float x = 1;
-	float y = 2;
-	float z = 3;
-	float w = 4;
-}
-
-message Color
-{
-	float r = 1;
-	float g = 2;
-	float b = 3;
-	float a = 4;
-}
-
-message AmbienceSettings
-{
-	Color skyZenithColor = 1;
-	Color skyHorizonColor = 2;
-
-	float sunAltitude = 3;
-	float sunAzimuth = 4;
-	float sunSize = 5;
-
-	float fogDDensity = 6;
-}
-
-enum LevelNodeShape
-{
-	START = 0;
-	FINISH = 1;
-	SIGN = 2;
-
-	__END_OF_SPECIAL_PARTS__ = 3;
-
-	CUBE = 1000;
-	SPHERE = 1001;
-	CYLINDER = 1002;
-	PYRAMID = 1003;
-	PRISM = 1004;
-}
-
-enum LevelNodeMaterial
-{
-	DEFAULT = 0;
-	GRABBABLE = 1;
-	ICE = 2;
-	LAVA = 3;
-	WOOD = 4;
-	GRAPPLABLE = 5;
-	GRAPPLABLE_LAVA = 6;
-
-	GRABBABLE_CRUMBLING= 7;
-	DEFAULT_COLORED = 8;
-	BOUNCING = 9;
-}
-
-message LevelNodeGroup
-{
-	Vector position = 1;
-	Vector scale = 2;
-	Quaternion rotation = 3;
-
-	repeated LevelNode childNodes = 4;
-}
-
-message LevelNodeStart
-{
-	Vector position = 1;
-	Quaternion rotation = 2;
-	float radius = 3;
-}
-
-message LevelNodeFinish
-{
-	Vector position = 1;
-	float radius = 2;
-}
-
-message LevelNodeStatic
-{
-	LevelNodeShape shape = 1;
-	LevelNodeMaterial material = 2;
-
-	Vector position = 3;
-	Vector scale = 4;
-	Quaternion rotation = 5;
-
-	Color color = 6;
-	bool isNeon = 7;
-}
-
-message LevelNodeCrumbling
-{
-	LevelNodeShape shape = 1;
-	LevelNodeMaterial material = 2;
-
-	Vector position = 3;
-	Vector scale = 4;
-	Quaternion rotation = 5;
-
-	float stableTime = 6;
-	float respawnTime = 7;
-}
-
-message LevelNodeSign
-{
-	Vector position = 1;
-	Quaternion rotation = 2;
-
-	string text = 3;
-}
-
-message AnimationFrame
-{
-	float time = 1;
-	Vector position = 2;
-	Quaternion rotation = 3;
-}
-
-message Animation
-{
-	enum Direction
-	{
-		RESTART = 0;
-		PINGPONG = 1;
-	}
-
-	string name = 1;
-	repeated AnimationFrame frames = 2;
-	Direction direction = 3;
-	float speed = 4;
-}
-
-message LevelNode
-{
-	bool isLocked = 6;
-
-	oneof content
-	{
-		LevelNodeStart levelNodeStart = 1;
-		LevelNodeFinish levelNodeFinish = 2;
-		LevelNodeStatic levelNodeStatic = 3;
-		LevelNodeSign levelNodeSign = 4;
-		LevelNodeCrumbling levelNodeCrumbling = 5;
-		LevelNodeGroup levelNodeGroup = 7;
-	}
-
-	repeated Animation animations = 15;
-}
-`
 
 function loadTexture(path) {
     return new Promise((resolve) => {
@@ -353,6 +177,14 @@ async function openProto(link) {
 }
 
 async function init() {
+    
+    console.log("Initializing");
+
+    const verifiedLevelsData = await fetch("https://grab-tools.live/stats_data/all_verified.json");
+    verifiedLevels = await verifiedLevelsData.json();
+    sortedLevels = [...verifiedLevels].sort((a, b) => b?.statistics?.total_played - a?.statistics?.total_played);
+
+    console.log("Loaded levels");
 
     THREE.ColorManagement.enabled = true;
 
@@ -364,65 +196,89 @@ async function init() {
     renderer.setPixelRatio(window.devicePixelRatio);
 
     scene = new THREE.Scene();
-
     camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 10000 );
     camera.position.set( 0, playerHeight, 0 );
-
     light = new THREE.AmbientLight(0x404040);
-    scene.add(light);
     sun = new THREE.DirectionalLight( 0xffffff, 0.5 );
-    scene.add( sun );
-
     controls = new Controls( camera, renderer.domElement );
-    scene.add( controls.getObject() );
 
     window.addEventListener( 'resize', onWindowResize );
 
-    let randomButton = document.getElementById("randomButton");
-    
-    randomButton.addEventListener( 'click', () => {
-        createPopup();
-        displayScore();
-        loadRandomLevel();
-    });
+    console.log("Generating assets");
 
     await initAttributes();
+    isLoading = false;
+    console.log("Loaded");
 
-    await loadRandomLevel();
+    let startButton = document.getElementById("start");
+    startButton.addEventListener( 'click', () => {
+        home.style.display = "none";
+        score = 0;
+        loadRandomLevel();
+    } );
+
+    setInterval(() => {
+        if (time <= 5000) {
+            time++;
+            displayBonus();
+        }
+    }, 1000);
 
     animate();
 }
 
 async function loadRandomLevel() {
-    const weights = [];
-    verifiedLevels.then(async levels => {
-        const sorted = [...levels].sort((a, b) => b?.statistics?.total_played - a?.statistics?.total_played);
-        const randomLevel = sorted[Math.floor(Math.random() * Math.min(difficulty, sorted.length - 1))];
-        answer = randomLevel.identifier;
-        answerJSON = randomLevel;
-        hintsGiven = 0;
-        hintButtons.forEach(button => {
-            button.classList.remove("unlocked");
-        });
-        startHint.classList.add("unlocked");
-        displayBonus();
-        const downloadUrl = `https://api.slin.dev/grab/v1/download/${randomLevel.data_key.replace("level_data:", "").split(":").join("/")}`;
-        let level =  await openProto(downloadUrl);
-        await loadLevel(level);
+    if ( isLoading ) { return; }
+    if ( round == 5 ) {
+        round = 0;
+        displayRound();
+        home.style.display = "flex";
+        localStorage.setItem("GG-Score-" + difficulty, score);
+        score = 0;
+        return;
+    }
+    round++;
+    time = 0;
+    displayRound();
+    const randomLevel = sortedLevels[Math.floor(Math.random() * Math.min(difficulty, sortedLevels.length - 1))];
+    answer = randomLevel.identifier;
+    answerJSON = randomLevel;
+    hintsGiven = 0;
+    hintButtons.forEach(button => {
+        button.classList.remove("unlocked");
     });
+    startHint.classList.add("unlocked");
+    displayBonus();
+    const downloadUrl = `https://api.slin.dev/grab/v1/download/${randomLevel.data_key.replace("level_data:", "").split(":").join("/")}`;
+    const level =  await openProto(downloadUrl);
+    await loadLevel(level);
 }
+
+let randomButton = document.getElementById("randomButton");
+
+randomButton.addEventListener( 'click', () => {
+    createPopup();
+    displayScore();
+    loadRandomLevel();
+});
 
 function displayScore() {
     document.getElementById("score").innerText = `Score: ${score}`;
 }
 function displayBonus() {
-    document.getElementById("bonus").innerText = `+ ${(5 - hintsGiven) * 1000}`;
+    document.getElementById("bonus").innerText = `+ ${Math.max(0, ((5 - hintsGiven) * 1000) - time)}`;
+}
+function displayRound() {
+    document.getElementById("round").innerText = `Round: ${round}/5`;
 }
 
 function guess(identifier) {
     if (identifier == answer) {
-        score += (5 - hintsGiven) * 1000;
+        score += Math.max(0, ((5 - hintsGiven) * 1000) - time);
     } else {
+        if (identifier.split(":")[0] == answer.split(":")[0]) {
+            score += Math.max(0, ((5 - hintsGiven) * 200) - time);
+        }
         createPopup();
     }
     displayScore();
@@ -431,6 +287,11 @@ function guess(identifier) {
 
 let difficultyButtons = document.querySelectorAll(".diff");
 difficultyButtons.forEach(button => {
+    let highScore = localStorage.getItem("GG-Score-" + button.id) || "0";
+    let highScoreText = document.createElement("p");
+    highScoreText.innerText = `Best: ${highScore}`;
+    button.appendChild(highScoreText);
+
     button.addEventListener("click", () => {
         difficulty = parseInt(button.id);
         difficultyButtons.forEach(b => {
@@ -483,45 +344,44 @@ fogHint.addEventListener("click", () => {
 async function loadSearch() {
     let query = document.getElementById("search").value;
     document.getElementById("cards").innerHTML = "";
-    verifiedLevels.then(levels => {
-        let results = levels.filter(l => (
-            l.title.toLowerCase().replace(" ", "").includes(query.toLowerCase().replace(" ", "")) ||
-            (l?.creators || []).toString().toLowerCase().replace(" ", "").includes(query.toLowerCase().replace(" ", ""))
+    
+    let results = verifiedLevels.filter(l => (
+        l.title.toLowerCase().replace(" ", "").includes(query.toLowerCase().replace(" ", "")) ||
+        (l?.creators || []).toString().toLowerCase().replace(" ", "").includes(query.toLowerCase().replace(" ", ""))
+    ));
+    if (query.charAt(0) == '"' && query.charAt(query.length - 1) == '"') {
+        query = query.substring(1, query.length - 1);
+        results = verifiedLevels.filter(l => (
+            l.title.toLowerCase().replace(" ", "") == (query.toLowerCase().replace(" ", "")) ||
+            l.title.toLowerCase().replace(" ", "") == (query.toLowerCase()) ||
+            l.title.toLowerCase() == (query.toLowerCase().replace(" ", "")) ||
+            l.title.toLowerCase() == (query.toLowerCase())
         ));
-        if (query.charAt(0) == '"' && query.charAt(query.length - 1) == '"') {
-            query = query.substring(1, query.length - 1);
-            results = levels.filter(l => (
-                l.title.toLowerCase().replace(" ", "") == (query.toLowerCase().replace(" ", "")) ||
-                l.title.toLowerCase().replace(" ", "") == (query.toLowerCase()) ||
-                l.title.toLowerCase() == (query.toLowerCase().replace(" ", "")) ||
-                l.title.toLowerCase() == (query.toLowerCase())
-            ));
+    }
+    if (results.length > 0) {
+        for (let i = 0; i < Math.min(results.length, 100); i++) {
+            let card = document.createElement("div");
+            card.className = "card";
+            let thumbnail = document.createElement("img");
+            thumbnail.onerror = () => {
+                thumbnail.style.display = "none";
+            };
+            thumbnail.src = "https://grab-images.slin.dev/" + results[i]?.images?.thumb?.key;
+            card.appendChild(thumbnail);
+            let title = document.createElement("h3");
+            title.innerText = results[i].title;
+            title.className = "title";
+            card.appendChild(title);
+            let creators = document.createElement("p");
+            creators.innerText = results[i].creators;
+            creators.className = "creators";
+            card.appendChild(creators);
+            document.getElementById("cards").appendChild(card);
+            card.addEventListener("click", async () => {
+                guess(results[i].identifier);
+            });
         }
-        if (results.length > 0) {
-            for (let i = 0; i < Math.min(results.length, 100); i++) {
-                let card = document.createElement("div");
-                card.className = "card";
-                let thumbnail = document.createElement("img");
-                thumbnail.onerror = () => {
-                    thumbnail.style.display = "none";
-                };
-                thumbnail.src = "https://grab-images.slin.dev/" + results[i]?.images?.thumb?.key;
-                card.appendChild(thumbnail);
-                let title = document.createElement("h3");
-                title.innerText = results[i].title;
-                title.className = "title";
-                card.appendChild(title);
-                let creators = document.createElement("p");
-                creators.innerText = results[i].creators;
-                creators.className = "creators";
-                card.appendChild(creators);
-                document.getElementById("cards").appendChild(card);
-                card.addEventListener("click", async () => {
-                    guess(results[i].identifier);
-                });
-            }
-        }
-    });
+    }
 }
 document.getElementById("search-submit").addEventListener("click", loadSearch);
 
@@ -639,6 +499,9 @@ async function loadLevel(level) {
 }
 
 function createPopup() {
+    if (!answerJSON) {
+        return;
+    }
     let lastPopup = document.getElementsByClassName("popup");
     if (lastPopup.length > 0) {
         lastPopup[0].remove();
