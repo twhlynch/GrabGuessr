@@ -229,7 +229,7 @@ async function init() {
 
 async function loadRandomLevel() {
     if ( isLoading ) { return; }
-    if ( round == 5 ) {
+    if ( round == 10 ) {
         round = 0;
         displayRound();
         home.style.display = "flex";
@@ -240,7 +240,15 @@ async function loadRandomLevel() {
     round++;
     time = 0;
     displayRound();
-    const randomLevel = sortedLevels[Math.floor(Math.random() * Math.min(difficulty, sortedLevels.length - 1))];
+    let randomLevel;
+    console.log(difficulty);
+    if (difficulty == "impossible") {
+        let reqData = await fetch("https://api.slin.dev/grab/v1/get_random_level");
+        let data = await reqData.json();
+        randomLevel = data;
+    } else {
+        randomLevel = sortedLevels[Math.floor(Math.random() * Math.min(difficulty, sortedLevels.length - 1))];
+    }
     answer = randomLevel.identifier;
     answerJSON = randomLevel;
     hintsGiven = 0;
@@ -269,7 +277,7 @@ function displayBonus() {
     document.getElementById("bonus").innerText = `+ ${Math.max(0, ((5 - hintsGiven) * 1000) - time)}`;
 }
 function displayRound() {
-    document.getElementById("round").innerText = `Round: ${round}/5`;
+    document.getElementById("round").innerText = `Round: ${round}/10`;
 }
 
 function guess(identifier) {
@@ -287,19 +295,22 @@ function guess(identifier) {
 
 let difficultyButtons = document.querySelectorAll(".diff");
 difficultyButtons.forEach(button => {
-    let highScore = localStorage.getItem("GG-Score-" + button.id) || "0";
-    let highScoreText = document.createElement("p");
-    highScoreText.innerText = `Best: ${highScore}`;
-    button.appendChild(highScoreText);
-
     button.addEventListener("click", () => {
         difficulty = parseInt(button.id);
+        if (difficulty.toString() == "NaN") {
+            difficulty = button.id;
+        }
+        console.log(difficulty);
         difficultyButtons.forEach(b => {
             b.classList.remove("difficulty");
         });
         button.classList.add("difficulty");
+        let highScore = localStorage.getItem("GG-Score-" + button.id) || "0";
+        let leaderboard = document.getElementById("lbd");
+        leaderboard.innerText = `High Score: ${highScore}`;
     });
 });
+document.querySelector(".difficulty").click();
 
 const hintButtons = document.querySelectorAll(".hint");
 hintButtons.forEach(button => {
@@ -344,20 +355,28 @@ fogHint.addEventListener("click", () => {
 async function loadSearch() {
     let query = document.getElementById("search").value;
     document.getElementById("cards").innerHTML = "";
-    
-    let results = verifiedLevels.filter(l => (
-        l.title.toLowerCase().replace(" ", "").includes(query.toLowerCase().replace(" ", "")) ||
-        (l?.creators || []).toString().toLowerCase().replace(" ", "").includes(query.toLowerCase().replace(" ", ""))
-    ));
-    if (query.charAt(0) == '"' && query.charAt(query.length - 1) == '"') {
-        query = query.substring(1, query.length - 1);
+
+    let results;
+    if (difficulty == "impossible") {
+        let searchRes = await fetch("https://api.slin.dev/grab/v1/list?max_format_version=100&type=search&search_term=" + query);
+        let data = await searchRes.json();
+        results = data;
+    } else {
         results = verifiedLevels.filter(l => (
-            l.title.toLowerCase().replace(" ", "") == (query.toLowerCase().replace(" ", "")) ||
-            l.title.toLowerCase().replace(" ", "") == (query.toLowerCase()) ||
-            l.title.toLowerCase() == (query.toLowerCase().replace(" ", "")) ||
-            l.title.toLowerCase() == (query.toLowerCase())
+            l.title.toLowerCase().replace(" ", "").includes(query.toLowerCase().replace(" ", "")) ||
+            (l?.creators || []).toString().toLowerCase().replace(" ", "").includes(query.toLowerCase().replace(" ", ""))
         ));
+        if (query.charAt(0) == '"' && query.charAt(query.length - 1) == '"') {
+            query = query.substring(1, query.length - 1);
+            results = verifiedLevels.filter(l => (
+                l.title.toLowerCase().replace(" ", "") == (query.toLowerCase().replace(" ", "")) ||
+                l.title.toLowerCase().replace(" ", "") == (query.toLowerCase()) ||
+                l.title.toLowerCase() == (query.toLowerCase().replace(" ", "")) ||
+                l.title.toLowerCase() == (query.toLowerCase())
+            ));
+        }
     }
+    
     if (results.length > 0) {
         for (let i = 0; i < Math.min(results.length, 100); i++) {
             let card = document.createElement("div");
