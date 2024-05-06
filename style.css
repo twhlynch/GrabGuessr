@@ -292,6 +292,10 @@ menu svg {
     padding: 0;
     padding-block: 2px;
 }
+#home img {
+    width: 100%;
+    max-width: 500px;
+}
 #home p {
     font-size: 1rem;
     margin: 0;
