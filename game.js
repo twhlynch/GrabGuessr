@@ -49,6 +49,7 @@ let shapeList = [
     'models/cylinder.gltf',
     'models/pyramid.gltf',
     'models/prism.gltf',
+    'models/cone.glft',
     'models/sign.gltf',
     'models/start_end.gltf'
 ];
@@ -719,7 +720,7 @@ function loadLevelNode(node, parent) {
     } else if (node.levelNodeSign) {
         // object = shapes[5].clone();
         // object.material = materials[4].clone();
-        object = new THREE.Mesh(shapes[5].geometry, objectMaterials[2].clone());
+        object = new THREE.Mesh(shapes[6].geometry, objectMaterials[2].clone());
         parent.add(object);
         object.position.x = -node.levelNodeSign.position.x || 0;
         object.position.y = node.levelNodeSign.position.y || 0;
@@ -783,7 +784,7 @@ function loadLevelNode(node, parent) {
     } else if (node.levelNodeStart) {
         // object = shapes[6].clone();
         // object.material = startMaterial;
-        object = new THREE.Mesh(shapes[6].geometry, startMaterial);
+        object = new THREE.Mesh(shapes[7].geometry, startMaterial);
         parent.add(object);
         object.position.x = -node.levelNodeStart.position.x || 0;
         object.position.y = node.levelNodeStart.position.y || 0;
@@ -805,7 +806,7 @@ function loadLevelNode(node, parent) {
     } else if (node.levelNodeFinish) {
         // object = shapes[6].clone();
         // object.material = finishMaterial;
-        object = new THREE.Mesh(shapes[6].geometry, finishMaterial);
+        object = new THREE.Mesh(shapes[7].geometry, finishMaterial);
         parent.add(object);
         object.position.x = -node.levelNodeFinish.position.x || 0;
         object.position.y = node.levelNodeFinish.position.y || 0;
