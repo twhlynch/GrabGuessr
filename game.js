@@ -208,6 +208,8 @@ async function init() {
 
     await initAttributes();
     isLoading = false;
+    document.getElementById("loader").style.display = "none";
+    document.getElementById("start-button").style.display = "block";
     console.log("Loaded");
 
     let startButton = document.getElementById("start");
@@ -248,6 +250,9 @@ async function loadRandomLevel() {
         randomLevel = data;
     } else {
         randomLevel = sortedLevels[Math.floor(Math.random() * Math.min(difficulty, sortedLevels.length - 1))];
+        let reqData = await fetch(`https://api.slin.dev/grab/v1/details/${randomLevel.identifier.split(":").join("/")}`);
+        let data = await reqData.json();
+        randomLevel = data;
     }
     answer = randomLevel.identifier;
     answerJSON = randomLevel;

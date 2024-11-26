@@ -137,9 +137,8 @@ menu svg {
     background: rgba(0, 0, 0, 0.1);
     color: rgb(255, 255, 255);
     width: 100%;
-    height: fit-content;
+    height: 160px;
     overflow: hidden;
-    min-height: 100%;
 }
 .card:hover {
     background: rgba(0, 0, 0, 0.2);
@@ -319,12 +318,12 @@ menu svg {
     color: white;
     transition: all 0.3s ease;
 }
-#home #start svg:hover {
+#home #start svg#start-button:hover {
     height: 80px;
     width: 80px;
+    cursor: pointer;
 }
 #home #start {
-    cursor: pointer;
     padding: 3px;
     border: none;
     border: none;
