@@ -49,7 +49,7 @@ let shapeList = [
     'models/cylinder.gltf',
     'models/pyramid.gltf',
     'models/prism.gltf',
-    'models/cone.glft',
+    'models/cone.gltf',
     'models/sign.gltf',
     'models/start_end.gltf'
 ];
