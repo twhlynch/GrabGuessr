@@ -3,8 +3,17 @@ import { Controls } from './Controls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
-import * as SHADERS from './shaders.js';
-import { PROTOBUF_DATA } from './protobuf.js';
+import * as SHADERS from 'https://grab-tools.live/js/shaders.js';
+let PROTOBUF_DATA;
+fetch('https://grab-tools.live/proto/proto.proto')
+.then(d => d.text())
+.then(text => {
+    PROTOBUF_DATA = text;
+    console.log(PROTOBUF_DATA);
+})
+.catch(e => console.log(e));
+// import * as SHADERS from './shaders.js';
+// import { PROTOBUF_DATA } from './protobuf.js';
 
 const playerHeight = 1;
 
@@ -561,16 +570,16 @@ function loadLevelNode(node, parent) {
         objects.push( object );
         parent.add( object );
 
-        object.position.x = -node.levelNodeGroup.position.x || 0;
-        object.position.y = node.levelNodeGroup.position.y || 0;
-        object.position.z = -node.levelNodeGroup.position.z || 0;
-        object.scale.x = node.levelNodeGroup.scale.x || 0;
-        object.scale.y = node.levelNodeGroup.scale.y || 0;
-        object.scale.z = node.levelNodeGroup.scale.z || 0;
-        object.quaternion.x = -node.levelNodeGroup.rotation.x || 0;
-        object.quaternion.y = node.levelNodeGroup.rotation.y || 0;
-        object.quaternion.z = -node.levelNodeGroup.rotation.z || 0;
-        object.quaternion.w = node.levelNodeGroup.rotation.w || 0;
+        object.position.x = -node.levelNodeGroup.position?.x || 0;
+        object.position.y = node.levelNodeGroup.position?.y || 0;
+        object.position.z = -node.levelNodeGroup.position?.z || 0;
+        object.scale.x = node.levelNodeGroup.scale?.x || 0;
+        object.scale.y = node.levelNodeGroup.scale?.y || 0;
+        object.scale.z = node.levelNodeGroup.scale?.z || 0;
+        object.quaternion.x = -node.levelNodeGroup.rotation?.x || 0;
+        object.quaternion.y = node.levelNodeGroup.rotation?.y || 0;
+        object.quaternion.z = -node.levelNodeGroup.rotation?.z || 0;
+        object.quaternion.w = node.levelNodeGroup.rotation?.w || 0;
         
         object.initialPosition = object.position.clone();
         object.initialRotation = object.quaternion.clone();
@@ -591,18 +600,18 @@ function loadLevelNode(node, parent) {
         object = new THREE.Object3D()
         parent.add(object);
 
-        object.position.x = -node.levelNodeGravity.position.x || 0;
-        object.position.y = node.levelNodeGravity.position.y || 0;
-        object.position.z = -node.levelNodeGravity.position.z || 0;
+        object.position.x = -node.levelNodeGravity.position?.x || 0;
+        object.position.y = node.levelNodeGravity.position?.y || 0;
+        object.position.z = -node.levelNodeGravity.position?.z || 0;
 
-        object.scale.x = node.levelNodeGravity.scale.x || 0;
-        object.scale.y = node.levelNodeGravity.scale.y || 0;
-        object.scale.z = node.levelNodeGravity.scale.z || 0;
+        object.scale.x = node.levelNodeGravity.scale?.x || 0;
+        object.scale.y = node.levelNodeGravity.scale?.y || 0;
+        object.scale.z = node.levelNodeGravity.scale?.z || 0;
 
-        object.quaternion.x = -node.levelNodeGravity.rotation.x || 0;
-        object.quaternion.y = node.levelNodeGravity.rotation.y || 0;
-        object.quaternion.z = -node.levelNodeGravity.rotation.z || 0;
-        object.quaternion.w = node.levelNodeGravity.rotation.w || 0;
+        object.quaternion.x = -node.levelNodeGravity.rotation?.x || 0;
+        object.quaternion.y = node.levelNodeGravity.rotation?.y || 0;
+        object.quaternion.z = -node.levelNodeGravity.rotation?.z || 0;
+        object.quaternion.w = node.levelNodeGravity.rotation?.w || 0;
 
         object.initialPosition = object.position.clone();
         object.initialRotation = object.quaternion.clone();
@@ -637,26 +646,27 @@ function loadLevelNode(node, parent) {
             if (node.levelNodeStatic.isNeon) {
                 material = objectMaterials[3].clone();
             }
-            node.levelNodeStatic.color.r ? null : node.levelNodeStatic.color.r = 0;
-            node.levelNodeStatic.color.g ? null : node.levelNodeStatic.color.g = 0;
-            node.levelNodeStatic.color.b ? null : node.levelNodeStatic.color.b = 0;
-            material.uniforms.diffuseColor.value = [node.levelNodeStatic.color.r, node.levelNodeStatic.color.g, node.levelNodeStatic.color.b]
-            const specularFactor = Math.sqrt(node.levelNodeStatic.color.r * node.levelNodeStatic.color.r + node.levelNodeStatic.color.g * node.levelNodeStatic.color.g + node.levelNodeStatic.color.b * node.levelNodeStatic.color.b) * 0.15
+            node.levelNodeStatic.color1 ? null : node.levelNodeStatic.color1 = {};
+            node.levelNodeStatic.color1.r ? null : node.levelNodeStatic.color1.r = 0;
+            node.levelNodeStatic.color1.g ? null : node.levelNodeStatic.color1.g = 0;
+            node.levelNodeStatic.color1.b ? null : node.levelNodeStatic.color1.b = 0;
+            material.uniforms.diffuseColor.value = [node.levelNodeStatic.color1?.r, node.levelNodeStatic.color1?.g, node.levelNodeStatic.color1?.b]
+            const specularFactor = Math.sqrt(node.levelNodeStatic.color1?.r * node.levelNodeStatic.color1?.r + node.levelNodeStatic.color1?.g * node.levelNodeStatic.color1?.g + node.levelNodeStatic.color1?.b * node.levelNodeStatic.color1?.b) * 0.15
             material.uniforms.specularColor.value = [specularFactor, specularFactor, specularFactor, 16.0]
         }
         object = new THREE.Mesh(shapes[node?.levelNodeStatic?.shape-1000 || 0].geometry, material);
         // object.material = material;
         parent.add(object);
-        object.position.x = -node.levelNodeStatic.position.x || 0;
-        object.position.y = node.levelNodeStatic.position.y || 0;
-        object.position.z = -node.levelNodeStatic.position.z || 0;
-        object.quaternion.w = node.levelNodeStatic.rotation.w || 0;
-        object.quaternion.x = -node.levelNodeStatic.rotation.x || 0;
-        object.quaternion.y = node.levelNodeStatic.rotation.y || 0;
-        object.quaternion.z = -node.levelNodeStatic.rotation.z || 0;
-        object.scale.x = node.levelNodeStatic.scale.x || 0;
-        object.scale.y = node.levelNodeStatic.scale.y || 0;
-        object.scale.z = node.levelNodeStatic.scale.z || 0;
+        object.position.x = -node.levelNodeStatic.position?.x || 0;
+        object.position.y = node.levelNodeStatic.position?.y || 0;
+        object.position.z = -node.levelNodeStatic.position?.z || 0;
+        object.quaternion.w = node.levelNodeStatic.rotation?.w || 0;
+        object.quaternion.x = -node.levelNodeStatic.rotation?.x || 0;
+        object.quaternion.y = node.levelNodeStatic.rotation?.y || 0;
+        object.quaternion.z = -node.levelNodeStatic.rotation?.z || 0;
+        object.scale.x = node.levelNodeStatic.scale?.x || 0;
+        object.scale.y = node.levelNodeStatic.scale?.y || 0;
+        object.scale.z = node.levelNodeStatic.scale?.z || 0;
 
         object.initialPosition = object.position.clone();
         object.initialRotation = object.quaternion.clone();
@@ -688,16 +698,16 @@ function loadLevelNode(node, parent) {
         object = new THREE.Mesh(shapes[node?.levelNodeCrumbling?.shape-1000 || 0].geometry, material);
         // object.material = material;
         parent.add(object);
-        object.position.x = -node.levelNodeCrumbling.position.x || 0;
-        object.position.y = node.levelNodeCrumbling.position.y || 0;
-        object.position.z = -node.levelNodeCrumbling.position.z || 0;
-        object.quaternion.w = node.levelNodeCrumbling.rotation.w || 0;
-        object.quaternion.x = -node.levelNodeCrumbling.rotation.x || 0;
-        object.quaternion.y = node.levelNodeCrumbling.rotation.y || 0;
-        object.quaternion.z = -node.levelNodeCrumbling.rotation.z || 0;
-        object.scale.x = node.levelNodeCrumbling.scale.x || 0;
-        object.scale.y = node.levelNodeCrumbling.scale.y || 0;
-        object.scale.z = node.levelNodeCrumbling.scale.z || 0;
+        object.position.x = -node.levelNodeCrumbling.position?.x || 0;
+        object.position.y = node.levelNodeCrumbling.position?.y || 0;
+        object.position.z = -node.levelNodeCrumbling.position?.z || 0;
+        object.quaternion.w = node.levelNodeCrumbling.rotation?.w || 0;
+        object.quaternion.x = -node.levelNodeCrumbling.rotation?.x || 0;
+        object.quaternion.y = node.levelNodeCrumbling.rotation?.y || 0;
+        object.quaternion.z = -node.levelNodeCrumbling.rotation?.z || 0;
+        object.scale.x = node.levelNodeCrumbling.scale?.x || 0;
+        object.scale.y = node.levelNodeCrumbling.scale?.y || 0;
+        object.scale.z = node.levelNodeCrumbling.scale?.z || 0;
 
         object.initialPosition = object.position.clone();
         object.initialRotation = object.quaternion.clone();
@@ -722,13 +732,13 @@ function loadLevelNode(node, parent) {
         // object.material = materials[4].clone();
         object = new THREE.Mesh(shapes[6].geometry, objectMaterials[2].clone());
         parent.add(object);
-        object.position.x = -node.levelNodeSign.position.x || 0;
-        object.position.y = node.levelNodeSign.position.y || 0;
-        object.position.z = -node.levelNodeSign.position.z || 0;
-        object.quaternion.w = node.levelNodeSign.rotation.w || 0;
-        object.quaternion.x = -node.levelNodeSign.rotation.x || 0;
-        object.quaternion.y = node.levelNodeSign.rotation.y || 0;
-        object.quaternion.z = -node.levelNodeSign.rotation.z || 0;
+        object.position.x = -node.levelNodeSign.position?.x || 0;
+        object.position.y = node.levelNodeSign.position?.y || 0;
+        object.position.z = -node.levelNodeSign.position?.z || 0;
+        object.quaternion.w = node.levelNodeSign.rotation?.w || 0;
+        object.quaternion.x = -node.levelNodeSign.rotation?.x || 0;
+        object.quaternion.y = node.levelNodeSign.rotation?.y || 0;
+        object.quaternion.z = -node.levelNodeSign.rotation?.z || 0;
 
         const signText = node.levelNodeSign.text || "";
         const words = signText.split(" ");
@@ -786,13 +796,13 @@ function loadLevelNode(node, parent) {
         // object.material = startMaterial;
         object = new THREE.Mesh(shapes[7].geometry, startMaterial);
         parent.add(object);
-        object.position.x = -node.levelNodeStart.position.x || 0;
-        object.position.y = node.levelNodeStart.position.y || 0;
-        object.position.z = -node.levelNodeStart.position.z || 0;
-        object.quaternion.w = node.levelNodeStart.rotation.w || 0;
-        object.quaternion.x = -node.levelNodeStart.rotation.x || 0;
-        object.quaternion.y = node.levelNodeStart.rotation.y || 0;
-        object.quaternion.z = -node.levelNodeStart.rotation.z || 0;
+        object.position.x = -node.levelNodeStart.position?.x || 0;
+        object.position.y = node.levelNodeStart.position?.y || 0;
+        object.position.z = -node.levelNodeStart.position?.z || 0;
+        object.quaternion.w = node.levelNodeStart.rotation?.w || 0;
+        object.quaternion.x = -node.levelNodeStart.rotation?.x || 0;
+        object.quaternion.y = node.levelNodeStart.rotation?.y || 0;
+        object.quaternion.z = -node.levelNodeStart.rotation?.z || 0;
         object.scale.x = node.levelNodeStart.radius || 0;
         object.scale.z = node.levelNodeStart.radius || 0;
 
@@ -808,9 +818,9 @@ function loadLevelNode(node, parent) {
         // object.material = finishMaterial;
         object = new THREE.Mesh(shapes[7].geometry, finishMaterial);
         parent.add(object);
-        object.position.x = -node.levelNodeFinish.position.x || 0;
-        object.position.y = node.levelNodeFinish.position.y || 0;
-        object.position.z = -node.levelNodeFinish.position.z || 0;
+        object.position.x = -node.levelNodeFinish.position?.x || 0;
+        object.position.y = node.levelNodeFinish.position?.y || 0;
+        object.position.z = -node.levelNodeFinish.position?.z || 0;
         object.scale.x = node.levelNodeFinish.radius || 0;
         object.scale.z = node.levelNodeFinish.radius || 0;
 
@@ -824,13 +834,13 @@ function loadLevelNode(node, parent) {
         object.grabNodeData = node;
         if(node.animations && node.animations.length > 0 && node.animations[0].frames && node.animations[0].frames.length > 0) {
             for (let frame of node.animations[0].frames) {
-                frame.position.x = frame.position.x || 0;
-                frame.position.y = frame.position.y || 0;
-                frame.position.z = frame.position.z || 0;
-                frame.rotation.x = frame.rotation.x || 0;
-                frame.rotation.y = frame.rotation.y || 0;
-                frame.rotation.z = frame.rotation.z || 0;
-                frame.rotation.w = frame.rotation.w || 0;
+                frame.position.x = frame.position?.x || 0;
+                frame.position.y = frame.position?.y || 0;
+                frame.position.z = frame.position?.z || 0;
+                frame.rotation.x = frame.rotation?.x || 0;
+                frame.rotation.y = frame.rotation?.y || 0;
+                frame.rotation.z = frame.rotation?.z || 0;
+                frame.rotation.w = frame.rotation?.w || 0;
                 frame.time = frame.time || 0;
             }
             object.animation = node.animations[0]
